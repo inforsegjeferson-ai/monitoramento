@@ -15,8 +15,20 @@ const statusLabel: Record<string, string> = {
   alerta: 'Alerta',
 };
 
+const statusOrder: Record<string, number> = {
+  online: 0,
+  alerta: 1,
+  offline: 2,
+};
+
 export function generateReportPdf(plants: Plant[], stats: ReportStats): void {
   if (!plants.length) return;
+  const sorted = [...plants].sort((a, b) => {
+    const byBrand = a.brand.localeCompare(b.brand, 'pt-BR');
+    if (byBrand !== 0) return byBrand;
+    return (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+  });
+
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   let y = 18;
@@ -63,18 +75,24 @@ export function generateReportPdf(plants: Plant[], stats: ReportStats): void {
   doc.text('Usinas', 14, y);
   y += 6;
 
-  const rows = plants.map((p) => [
+  const rows = sorted.map((p) => [
     p.nome_cliente,
     p.brand,
     statusLabel[p.status] ?? p.status,
     p.potencia_instalada_kwp > 0 ? p.potencia_instalada_kwp.toFixed(1) : '-',
     p.potencia_atual_kw.toFixed(2),
+    p.geracao_dia_kwh != null
+      ? p.geracao_dia_kwh.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '-',
+    p.geracao_ontem_kwh != null
+      ? p.geracao_ontem_kwh.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '-',
     `${p.efficiency.toFixed(1)}%`,
   ]);
 
   autoTable(doc, {
     startY: y,
-    head: [['Cliente', 'Marca', 'Status', 'Potência (kWp)', 'Produção (kW)', 'Eficiência']],
+    head: [['Cliente', 'Marca', 'Status', 'Potência (kWp)', 'Produção (kW)', 'Geração do dia (kWh)', 'Geração do dia anterior (kWh)', 'Eficiência']],
     body: rows,
     theme: 'striped',
     headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
@@ -90,7 +108,7 @@ export function generateReportPdf(plants: Plant[], stats: ReportStats): void {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.text(
-      `J Monitoramento • ${plants.length} usinas • ${dateStr} • Página ${i}/${totalPages}`,
+      `J Monitoramento • ${sorted.length} usinas • ${dateStr} • Página ${i}/${totalPages}`,
       14,
       doc.internal.pageSize.getHeight() - 10
     );

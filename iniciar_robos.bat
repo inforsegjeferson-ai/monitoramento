@@ -1,4 +1,10 @@
 @echo off
+if not "%1"=="min" (
+    start /min "" "%~f0" min
+    exit /b
+)
+setlocal enabledelayedexpansion
+
 :inicio
 cls
 echo ==========================================
@@ -6,35 +12,39 @@ echo 🚀 MAESTRO: MONITORAMENTO SOLAR
 echo 🕒 Hora atual: %time%
 echo ==========================================
 
-:: Extrai apenas a hora do sistema (HH)
-set "current_hour=%time:~0,2%"
+:: Pega a hora de forma mais segura
+set "hora=%time:~0,2%"
+:: Remove espaços caso a hora seja entre 00 e 09
+set "hora=%hora: =0%"
 
-:: Remove espaços (caso a hora seja menor que 10, ex: " 8")
-set "current_hour=%current_hour: =%"
+echo Hora processada: %hora%h
 
-:: Verifica se a hora está entre 7 e 17 (termina às 18:00)
-if %current_hour% GEQ 7 if %current_hour% LSS 18 (
-    echo ☀️ Dentro do horário de operação (07h às 18h).
-    goto executar_robo
-) else (
-    echo 🌙 Fora do horário de operação. 
-    echo 💤 Aguardando o sol nascer para reiniciar...
-    timeout /t 600 /nobreak
-    goto inicio
+:: Verifica se esta entre 07 e 18
+if %hora% GEQ 07 (
+    if %hora% LSS 18 (
+        echo ☀️ Dentro do horario de operacao.
+        goto executar_robo
+    )
 )
 
-:executar_robo
-:: Entra na pasta do projeto
-cd /d "C:\monitoramento"
+:fora_horario
+echo 🌙 Fora do horario de operacao (07h as 18h).
+echo 💤 Aguardando...
+timeout /t 300 /nobreak
+goto inicio
 
-:: Executa o Maestro
-node robo_maestro.js
+:executar_robo
+cd /d "C:\monitoramento"
+:: Verificando se o arquivo existe antes de rodar
+if exist robo_maestro.js (
+    node robo_maestro.js
+) else (
+    echo ❌ ERRO: Arquivo robo_maestro.js nao encontrado em C:\monitoramento
+    pause
+    exit
+)
 
 echo.
-echo ✅ Ciclo finalizado com sucesso!
-echo ⏳ Aguardando 180 segundos para a próxima rodada...
-
-:: Aguarda 180 segundos (3 minutos)
-timeout /t 180 /nobreak
-
+echo ✅ Ciclo finalizado!
+timeout /t 300 /nobreak
 goto inicio

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ const statuses: { value: PlantStatus | 'all'; label: string }[] = [
   { value: 'offline', label: 'Offline' },
 ];
 
-type SortKey = 'status' | 'cliente' | 'marca' | 'potencia' | 'producao' | 'geracao_dia' | 'efficiency';
+type SortKey = 'status' | 'cliente' | 'marca' | 'potencia' | 'producao' | 'geracao_dia' | 'geracao_ontem' | 'efficiency';
 const STATUS_ORDER: Record<PlantStatus, number> = { online: 0, alerta: 1, offline: 2 };
 
 export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
@@ -34,6 +34,7 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
   const [showBrandFilter, setShowBrandFilter] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [displayLimit, setDisplayLimit] = useState(100);
   const { isFavorite, toggleFavorite } = useFavorites();
 
   const handleSort = (key: SortKey) => {
@@ -87,6 +88,12 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
             cmp = ga - gb;
             break;
           }
+          case 'geracao_ontem': {
+            const ga = a.geracao_ontem_kwh ?? -1;
+            const gb = b.geracao_ontem_kwh ?? -1;
+            cmp = ga - gb;
+            break;
+          }
           case 'efficiency':
             cmp = a.efficiency - b.efficiency;
             break;
@@ -99,6 +106,13 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
     return result;
   }, [plants, searchQuery, selectedBrand, selectedStatus, isFavorite, sortBy, sortDir]);
 
+  const visiblePlants = useMemo(
+    () => filteredPlants.slice(0, displayLimit),
+    [filteredPlants, displayLimit]
+  );
+  const hasMore = filteredPlants.length > displayLimit;
+  const total = filteredPlants.length;
+
   const clearFilters = () => {
     setSearchQuery('');
     setSelectedBrand(null);
@@ -106,6 +120,13 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
   };
 
   const hasActiveFilters = searchQuery || selectedBrand || selectedStatus !== 'all';
+
+  const loadMore = () => setDisplayLimit((prev) => Math.min(prev + 100, total));
+  const showAll = () => setDisplayLimit(total);
+
+  useEffect(() => {
+    setDisplayLimit(100);
+  }, [searchQuery, selectedBrand, selectedStatus]);
 
   return (
     <div className="glass-card rounded-xl p-6 animate-fade-in">
@@ -200,7 +221,7 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
 
       {/* Table: overflow-auto para rolagem vertical e horizontal e evitar coluna Eficiência cortada */}
       <div className="h-[500px] overflow-auto rounded-lg border border-border">
-        <Table className="min-w-[1000px] w-full">
+        <Table className="min-w-[1130px] w-full">
           <TableHeader className="sticky top-0 bg-card z-10">
             <TableRow className="hover:bg-transparent border-border">
               <TableHead className="w-[44px] px-2" title="Favorito" />
@@ -265,6 +286,16 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
                   {sortBy === 'geracao_dia' ? (sortDir === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />) : <ArrowUpDown className="h-3.5 w-3 opacity-50" />}
                 </button>
               </TableHead>
+              <TableHead className="text-right w-[130px] whitespace-nowrap">
+                <button
+                  type="button"
+                  onClick={() => handleSort('geracao_ontem')}
+                  className="inline-flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
+                >
+                  Geração do dia anterior (kWh)
+                  {sortBy === 'geracao_ontem' ? (sortDir === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />) : <ArrowUpDown className="h-3.5 w-3 opacity-50" />}
+                </button>
+              </TableHead>
               <TableHead className="text-right w-[100px] whitespace-nowrap">
                 <button
                   type="button"
@@ -278,7 +309,7 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPlants.slice(0, 100).map((plant) => (
+            {visiblePlants.map((plant) => (
               <TableRow
                 key={plant.id}
                 className="cursor-pointer hover:bg-accent/50 transition-colors border-border"
@@ -329,6 +360,11 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
                     ? plant.geracao_dia_kwh.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : '-'}
                 </TableCell>
+                <TableCell className="text-right tabular-nums whitespace-nowrap">
+                  {plant.geracao_ontem_kwh != null
+                    ? plant.geracao_ontem_kwh.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : '-'}
+                </TableCell>
                 <TableCell className="text-right whitespace-nowrap">
                   <span className={cn(
                     'font-semibold tabular-nums',
@@ -342,11 +378,29 @@ export function FleetTable({ plants, onPlantSelect }: FleetTableProps) {
             ))}
           </TableBody>
         </Table>
-        {filteredPlants.length > 100 && (
-          <div className="text-center py-4 text-sm text-muted-foreground">
-            Mostrando 100 de {filteredPlants.length} resultados
-          </div>
-        )}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 py-4 px-4 text-sm text-muted-foreground border-t border-border">
+          <span>
+            Mostrando {visiblePlants.length} de {total} resultados
+          </span>
+          {hasMore && (
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadMore}
+              >
+                Carregar mais 100
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={showAll}
+              >
+                Ver todos ({total})
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,8 @@
 @echo off
+if not "%1"=="min" (
+    start /min "" "%~f0" min
+    exit /b
+)
 echo 🚀 Iniciando ecossistema de monitoramento...
 
 :: Inicia o Monitoramento (Frontend) na porta 3000
